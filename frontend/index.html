@@ -7,7 +7,147 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div id="app"></div>
+
+  <header>
+    <div class="header-inner">
+      <div class="logo">
+        <span class="logo-icon">⬡</span>
+        <span class="logo-text">WireOS</span>
+      </div>
+      <p class="subtitle">Personal Data Federation for AI Agents</p>
+      <div class="status-bar">
+        <span class="status-dot" id="status-dot"></span>
+        <span class="status-label" id="status-label">connecting...</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+
+    <section class="intents-section">
+      <h2 class="section-title">// intent catalog</h2>
+      <div class="intent-grid" id="intent-grid">
+
+        <div class="intent-card" data-intent="recent_purchases" data-sources="1">
+          <div class="card-header">
+            <span class="card-icon">🛒</span>
+            <span class="card-badge">transaction</span>
+          </div>
+          <h3 class="card-title">Recent Purchases</h3>
+          <p class="card-desc">What did I buy recently and how much did I spend?</p>
+          <div class="card-meta">
+            <span class="meta-item">amazon</span>
+          </div>
+          <button class="run-btn" data-intent="recent_purchases">
+            <span class="btn-text">▶ Run</span>
+            <span class="btn-loading" hidden>◌ fetching from 1 source...</span>
+          </button>
+        </div>
+
+        <div class="intent-card" data-intent="professional_activity" data-sources="2">
+          <div class="card-header">
+            <span class="card-icon">💼</span>
+            <span class="card-badge">activity</span>
+          </div>
+          <h3 class="card-title">Professional Activity</h3>
+          <p class="card-desc">What have I been doing professionally this week?</p>
+          <div class="card-meta">
+            <span class="meta-item">linkedin</span>
+          </div>
+          <button class="run-btn" data-intent="professional_activity">
+            <span class="btn-text">▶ Run</span>
+            <span class="btn-loading" hidden>◌ fetching from 2 sources...</span>
+          </button>
+        </div>
+
+        <div class="intent-card" data-intent="github_activity" data-sources="2">
+          <div class="card-header">
+            <span class="card-icon">⌥</span>
+            <span class="card-badge">activity</span>
+          </div>
+          <h3 class="card-title">GitHub Activity</h3>
+          <p class="card-desc">Show my recent commits, PRs, and code reviews.</p>
+          <div class="card-meta">
+            <span class="meta-item">github</span>
+          </div>
+          <button class="run-btn" data-intent="github_activity">
+            <span class="btn-text">▶ Run</span>
+            <span class="btn-loading" hidden>◌ fetching from 2 sources...</span>
+          </button>
+        </div>
+
+        <div class="intent-card" data-intent="portfolio_snapshot" data-sources="2">
+          <div class="card-header">
+            <span class="card-icon">◈</span>
+            <span class="card-badge">generic</span>
+          </div>
+          <h3 class="card-title">Portfolio Snapshot</h3>
+          <p class="card-desc">What is my current investment portfolio and net worth?</p>
+          <div class="card-meta">
+            <span class="meta-item">robinhood</span>
+          </div>
+          <button class="run-btn" data-intent="portfolio_snapshot">
+            <span class="btn-text">▶ Run</span>
+            <span class="btn-loading" hidden>◌ fetching from 2 sources...</span>
+          </button>
+        </div>
+
+        <div class="intent-card" data-intent="job_applications" data-sources="2">
+          <div class="card-header">
+            <span class="card-icon">◎</span>
+            <span class="card-badge">activity</span>
+          </div>
+          <h3 class="card-title">Job Applications</h3>
+          <p class="card-desc">What jobs have I applied to and what is their status?</p>
+          <div class="card-meta">
+            <span class="meta-item">linkedin</span>
+          </div>
+          <button class="run-btn" data-intent="job_applications">
+            <span class="btn-text">▶ Run</span>
+            <span class="btn-loading" hidden>◌ fetching from 2 sources...</span>
+          </button>
+        </div>
+
+        <div class="intent-card" data-intent="web_research" data-sources="1">
+          <div class="card-header">
+            <span class="card-icon">⌖</span>
+            <span class="card-badge">generic</span>
+          </div>
+          <h3 class="card-title">Web Research</h3>
+          <p class="card-desc">Search the web for current information on a topic.</p>
+          <div class="card-meta">
+            <span class="meta-item">anakin</span>
+          </div>
+          <button class="run-btn" data-intent="web_research">
+            <span class="btn-text">▶ Run</span>
+            <span class="btn-loading" hidden>◌ fetching from 1 source...</span>
+          </button>
+        </div>
+
+      </div>
+    </section>
+
+    <section class="results-section" id="results-section" hidden>
+      <div class="results-header">
+        <h2 class="section-title">// result</h2>
+        <div class="results-meta">
+          <span class="meta-badge latency-badge" id="latency-badge"></span>
+          <span class="meta-badge" id="failure-badge" hidden></span>
+          <span class="meta-badge source-badge" id="source-badge"></span>
+        </div>
+      </div>
+      <pre class="result-block" id="result-block"></pre>
+    </section>
+
+    <section class="log-section">
+      <h2 class="section-title">// activity log</h2>
+      <div class="log-strip" id="log-strip">
+        <div class="log-empty">no activity yet — run an intent to begin</div>
+      </div>
+    </section>
+
+  </main>
+
   <script src="app.js"></script>
 </body>
 </html>
