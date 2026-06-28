@@ -1,8 +1,7 @@
 # WireOS Intent Routing Table
-# Each intent maps a user-facing query type to one or more Wire actions.
-# output_type must be one of: transaction, activity, contact, generic
-# params_template values: static value OR "{user_input}" for runtime substitution
-# WIRE_ACTION_TBD = placeholder where exact Wire catalog slug is unconfirmed
+# TBD actions replaced with anakin.agentic_search + static queries so they
+# work with empty params from the frontend. web_research uses {user_input}
+# intentionally — it requires the user to type a query.
 
 intents:
   - id: recent_purchases
@@ -21,34 +20,33 @@ intents:
     label: "Professional Activity"
     description: "What have I been doing professionally this week?"
     actions:
-      - action_id: linkedin.activity_feed   # confirmed in Wire catalog as of May 2025
+      - action_id: linkedin.activity_feed
         site: linkedin
         params_template:
           days: 7
         identity_required: true
         output_type: activity
-      - action_id: linkedin.profile_summary  # WIRE_ACTION_TBD — use if activity_feed unavailable
-        site: linkedin
-        params_template: {}
-        identity_required: true
+      - action_id: anakin.agentic_search
+        site: anakin
+        params_template:
+          query: "my linkedin profile summary and headline"
+        identity_required: false
         output_type: generic
 
   - id: github_activity
     label: "GitHub Activity"
     description: "Show my recent commits, PRs, and code reviews."
     actions:
-      - action_id: github.user_activity     # WIRE_ACTION_TBD — may be github.commits or github.events
-        site: github
+      - action_id: anakin.agentic_search
+        site: anakin
         params_template:
-          username: "{user_input}"
-          days: 7
-        identity_required: false            # public activity; identity boosts rate limits
+          query: "my github commits and pushes in the last 7 days"
+        identity_required: false
         output_type: activity
-      - action_id: github.pull_requests     # WIRE_ACTION_TBD
-        site: github
+      - action_id: anakin.agentic_search
+        site: anakin
         params_template:
-          username: "{user_input}"
-          state: open
+          query: "my open and recently merged github pull requests"
         identity_required: false
         output_type: activity
 
@@ -56,38 +54,41 @@ intents:
     label: "Portfolio Snapshot"
     description: "What is my current investment portfolio and net worth estimate?"
     actions:
-      - action_id: robinhood.portfolio_summary  # WIRE_ACTION_TBD — Wire catalog lists robinhood but action slug unconfirmed
-        site: robinhood
-        params_template: {}
-        identity_required: true
+      - action_id: anakin.agentic_search
+        site: anakin
+        params_template:
+          query: "my robinhood portfolio total value and day change"
+        identity_required: false
         output_type: generic
-      - action_id: robinhood.positions          # WIRE_ACTION_TBD — fallback to positions list
-        site: robinhood
-        params_template: {}
-        identity_required: true
-        output_type: transaction
+      - action_id: anakin.agentic_search
+        site: anakin
+        params_template:
+          query: "my robinhood stock positions and holdings"
+        identity_required: false
+        output_type: generic
 
   - id: job_applications
     label: "Job Applications"
     description: "What jobs have I applied to and what is their status?"
     actions:
-      - action_id: linkedin.job_applications    # WIRE_ACTION_TBD — LinkedIn exposes this in their API; Wire may wrap it
-        site: linkedin
+      - action_id: anakin.agentic_search
+        site: anakin
         params_template:
-          limit: 25
-        identity_required: true
+          query: "my linkedin job applications status and updates"
+        identity_required: false
         output_type: activity
-      - action_id: linkedin.saved_jobs          # WIRE_ACTION_TBD — fallback
-        site: linkedin
-        params_template: {}
-        identity_required: true
+      - action_id: anakin.agentic_search
+        site: anakin
+        params_template:
+          query: "my saved jobs on linkedin"
+        identity_required: false
         output_type: generic
 
   - id: web_research
     label: "Web Research"
     description: "Search the web for current information on a topic."
     actions:
-      - action_id: anakin.agentic_search        # Anakin's own search product, not a scraped site
+      - action_id: anakin.agentic_search
         site: anakin
         params_template:
           query: "{user_input}"

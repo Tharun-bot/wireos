@@ -20,6 +20,8 @@ import (
 
 var requestsTotal atomic.Int64
 
+// ── middleware ────────────────────────────────────────────────────────────────
+
 type statusRecorder struct {
 	http.ResponseWriter
 	status int
@@ -58,6 +60,8 @@ func withCORS(next http.Handler) http.Handler {
 	})
 }
 
+// ── helpers ───────────────────────────────────────────────────────────────────
+
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -76,6 +80,8 @@ func intentsPath() string {
 	return filepath.Join(dir, "intents", "intents.yaml")
 }
 
+// ── handlers ──────────────────────────────────────────────────────────────────
+
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{
 		"status":  "ok",
@@ -88,6 +94,44 @@ func metricsHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "# HELP wireos_requests_total Total HTTP requests handled\n")
 	fmt.Fprintf(w, "# TYPE wireos_requests_total counter\n")
 	fmt.Fprintf(w, "wireos_requests_total %d\n", requestsTotal.Load())
+}
+
+// catalogResponse is the shape returned by GET /catalog.
+type catalogResponse struct {
+	Mode        string             `json:"mode"`
+	IntentCount int                `json:"intent_count"`
+	Intents     []intents.Intent   `json:"intents"`
+	Sites       []wire.CatalogSite `json:"sites,omitempty"`
+	LastUpdated string             `json:"last_updated"`
+}
+
+func makeCatalogHandler(wc *wire.WireClient, allIntents []intents.Intent) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		mode := "demo"
+		if wc != nil {
+			mode = "live"
+		}
+
+		resp := catalogResponse{
+			Mode:        mode,
+			IntentCount: len(allIntents),
+			Intents:     allIntents,
+			LastUpdated: time.Now().Format(time.RFC3339),
+		}
+
+		// Enrich with Wire-side catalog when in live mode.
+		if wc != nil {
+			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+			defer cancel()
+			if sites, err := wc.GetCatalog(ctx); err == nil {
+				resp.Sites = sites
+			} else {
+				slog.Warn("catalog: wire GetCatalog failed", "error", err)
+			}
+		}
+
+		writeJSON(w, http.StatusOK, resp)
+	}
 }
 
 type intentRequest struct {
@@ -103,7 +147,7 @@ type intentResponse struct {
 	TotalLatencyMs int64                         `json:"total_latency_ms"`
 }
 
-func makeIntentHandler(wireClient *wire.WireClient, allIntents []intents.Intent) http.HandlerFunc {
+func makeIntentHandler(wc *wire.WireClient, allIntents []intents.Intent) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -126,6 +170,13 @@ func makeIntentHandler(wireClient *wire.WireClient, allIntents []intents.Intent)
 			return
 		}
 
+		// Demo mode: no Wire client — return mock data and skip executor entirely.
+		if wc == nil {
+			slog.Info("demo mode: returning mock response", "intent_id", req.IntentID)
+			writeJSON(w, http.StatusOK, GetMockResponse(req.IntentID))
+			return
+		}
+
 		slog.Info("intent request received",
 			"intent_id", intent.ID,
 			"action_count", len(intent.Actions),
@@ -134,7 +185,7 @@ func makeIntentHandler(wireClient *wire.WireClient, allIntents []intents.Intent)
 		ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
 		defer cancel()
 
-		summary, err := executor.Execute(ctx, wireClient, intent, req.Params)
+		summary, err := executor.Execute(ctx, wc, intent, req.Params)
 		if err != nil {
 			slog.Error("executor failed", "intent_id", intent.ID, "error", err)
 			writeError(w, http.StatusInternalServerError, "execution failed: "+err.Error())
@@ -149,7 +200,6 @@ func makeIntentHandler(wireClient *wire.WireClient, allIntents []intents.Intent)
 		slog.Info("intent executed",
 			"intent_id", intent.ID,
 			"label", intent.Label,
-			"action_count", len(intent.Actions),
 			"partial_failure", summary.PartialFailure,
 			"total_latency_ms", summary.TotalLatencyMs,
 			"total_credits", summary.TotalCredits,
@@ -165,15 +215,29 @@ func makeIntentHandler(wireClient *wire.WireClient, allIntents []intents.Intent)
 	}
 }
 
+// ── main ──────────────────────────────────────────────────────────────────────
+
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
 
+	// Load intents first so we can log the count.
+	yamlPath := intentsPath()
+	allIntents, err := intents.LoadIntents(yamlPath)
+	if err != nil {
+		slog.Error("failed to load intents", "path", yamlPath, "error", err)
+		os.Exit(1)
+	}
+	slog.Info("loaded intents", "count", len(allIntents), "path", yamlPath)
+
+	// Wire client — nil means demo mode.
+	var wc *wire.WireClient
 	apiKey := os.Getenv("ANAKIN_API_KEY")
-	if apiKey == "" {
-		slog.Error("ANAKIN_API_KEY environment variable is required")
-		//os.Exit(1)
-		apiKey = "ask_58024298a74a11f65ecf18d668537f03c29486fce50d8763704568acb6a55a6c"
+	if apiKey != "" {
+		wc = wire.NewWireClient(apiKey)
+		slog.Info("Wire API connected")
+	} else {
+		slog.Info("running in demo mode — set ANAKIN_API_KEY for live Wire API")
 	}
 
 	port := os.Getenv("PORT")
@@ -181,20 +245,11 @@ func main() {
 		port = "8081"
 	}
 
-	yamlPath := intentsPath()
-	allIntents, err := intents.LoadIntents(yamlPath)
-	if err != nil {
-		slog.Error("failed to load intents", "path", yamlPath, "error", err)
-		os.Exit(1)
-	}
-	slog.Info("intents loaded", "count", len(allIntents), "path", yamlPath)
-
-	wireClient := wire.NewWireClient(apiKey)
-
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", healthHandler)
 	mux.HandleFunc("GET /metrics", metricsHandler)
-	mux.HandleFunc("/intent", makeIntentHandler(wireClient, allIntents))
+	mux.HandleFunc("GET /catalog", makeCatalogHandler(wc, allIntents))
+	mux.HandleFunc("/intent", makeIntentHandler(wc, allIntents))
 
 	handler := withCORS(withLogging(mux))
 

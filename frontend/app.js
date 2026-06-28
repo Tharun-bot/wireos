@@ -1,37 +1,68 @@
-// ── config ────────────────────────────────────────────────────
-const API_BASE = 'http://localhost:8080';
+// ── config ─────────────────────────────────────────────────────────────────
+const API_BASE = window.location.hostname === 'localhost'
+  ? 'http://localhost:8081'
+  : 'https://wireos-backend.fly.dev';
+
 const MAX_LOG_ENTRIES = 20;
 
-// ── state ─────────────────────────────────────────────────────
-const logs = [];                   // array of log strings (max 20)
-const loadingState = {};           // { [intentId]: bool }
+// ── state ───────────────────────────────────────────────────────────────────
+const logs        = [];
+const loadingState = {};
+let   lastRawData  = null;   // stores last successful response for raw toggle
+let   showingRaw   = false;
 
-// ── boot ──────────────────────────────────────────────────────
+// ── boot ────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   checkHealth();
+  loadCatalog();
   bindRunButtons();
+  bindRawToggle();
 });
 
-// ── health check ──────────────────────────────────────────────
+// ── health check ────────────────────────────────────────────────────────────
 async function checkHealth() {
   const dot   = document.getElementById('status-dot');
   const label = document.getElementById('status-label');
   try {
-    const res = await fetch(`${API_BASE}/health`);
+    const res  = await fetch(`${API_BASE}/health`);
     const data = await res.json();
     if (data.status === 'ok') {
-      dot.className   = 'status-dot ok';
+      dot.className     = 'status-dot ok';
       label.textContent = `backend v${data.version} ✓`;
     } else {
       throw new Error('non-ok status');
     }
   } catch {
-    dot.className   = 'status-dot err';
+    dot.className     = 'status-dot err';
     label.textContent = 'backend unreachable';
   }
 }
 
-// ── button binding ────────────────────────────────────────────
+// ── catalog / status bar ────────────────────────────────────────────────────
+async function loadCatalog() {
+  const modeEl    = document.getElementById('catalog-mode');
+  const countEl   = document.getElementById('catalog-count');
+  const updatedEl = document.getElementById('catalog-updated');
+
+  try {
+    const res  = await fetch(`${API_BASE}/catalog`);
+    const data = await res.json();
+
+    const isLive = data.mode === 'live';
+    modeEl.textContent  = isLive ? 'LIVE' : 'DEMO';
+    modeEl.className    = 'mode-badge ' + (isLive ? 'mode-live' : 'mode-demo');
+    countEl.textContent = `${data.intent_count} intents loaded`;
+
+    const t = new Date();
+    updatedEl.textContent = `last updated ${t.toLocaleTimeString()}`;
+  } catch {
+    modeEl.textContent  = 'OFFLINE';
+    modeEl.className    = 'mode-badge mode-err';
+    countEl.textContent = 'could not reach backend';
+  }
+}
+
+// ── button binding ──────────────────────────────────────────────────────────
 function bindRunButtons() {
   document.querySelectorAll('.run-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -41,11 +72,42 @@ function bindRunButtons() {
   });
 }
 
-// ── run intent ────────────────────────────────────────────────
+// ── raw JSON toggle ─────────────────────────────────────────────────────────
+function bindRawToggle() {
+  const btn = document.getElementById('toggle-raw-btn');
+  if (!btn) return;
+
+  btn.addEventListener('click', () => {
+    if (!lastRawData) return;
+
+    const highlighted = document.getElementById('result-block');
+    const raw         = document.getElementById('raw-block');
+
+    showingRaw = !showingRaw;
+    if (showingRaw) {
+      raw.textContent = JSON.stringify(lastRawData, null, 2);
+      raw.hidden      = false;
+      highlighted.hidden = true;
+      btn.textContent = 'View Highlighted';
+    } else {
+      raw.hidden         = true;
+      highlighted.hidden = false;
+      btn.textContent    = 'View Raw JSON';
+    }
+  });
+}
+
+// ── run intent ───────────────────────────────────────────────────────────────
 async function runIntent(intentId) {
-  const card = document.querySelector(`.intent-card[data-intent="${intentId}"]`);
-  const btn  = card.querySelector('.run-btn');
+  const card    = document.querySelector(`.intent-card[data-intent="${intentId}"]`);
+  const btn     = card.querySelector('.run-btn');
   const sources = parseInt(card.dataset.sources, 10);
+
+  // Reset raw toggle state on new run
+  showingRaw   = false;
+  lastRawData  = null;
+  const rawBtn = document.getElementById('toggle-raw-btn');
+  if (rawBtn) rawBtn.textContent = 'View Raw JSON';
 
   setLoading(intentId, true, card, btn, sources);
   const t0 = performance.now();
@@ -57,39 +119,25 @@ async function runIntent(intentId) {
       body:    JSON.stringify({ intent_id: intentId, params: {} }),
     });
 
-    const data = await res.json();
+    const data      = await res.json();
     const latencyMs = Math.round(performance.now() - t0);
 
-    if (!res.ok) {
-      const msg = data.error || `HTTP ${res.status}`;
-      throw new Error(msg);
-    }
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
 
+    lastRawData = data;
     renderResults(data, latencyMs);
-    appendLog({
-      intentId,
-      sources: data.results?.length ?? sources,
-      latencyMs,
-      partial: data.partial_failure,
-      error:   null,
-    });
+    appendLog({ intentId, sources: data.results?.length ?? sources, latencyMs, partial: data.partial_failure, error: null });
 
   } catch (err) {
     const latencyMs = Math.round(performance.now() - t0);
     renderError(err.message);
-    appendLog({
-      intentId,
-      sources,
-      latencyMs,
-      partial: false,
-      error:   err.message,
-    });
+    appendLog({ intentId, sources, latencyMs, partial: false, error: err.message });
   } finally {
     setLoading(intentId, false, card, btn, sources);
   }
 }
 
-// ── loading state ─────────────────────────────────────────────
+// ── loading state ────────────────────────────────────────────────────────────
 function setLoading(intentId, isLoading, card, btn, sources) {
   loadingState[intentId] = isLoading;
 
@@ -101,7 +149,7 @@ function setLoading(intentId, isLoading, card, btn, sources) {
     btn.disabled = true;
     btnText.hidden    = true;
     btnSpinner.hidden = false;
-    btnSpinner.textContent = `◌ fetching from ${sources} source${sources !== 1 ? 's' : ''}...`;
+    btnSpinner.textContent = `◌ fetching from ${sources} source${sources !== 1 ? 's' : ''}…`;
   } else {
     card.classList.remove('loading');
     btn.disabled = false;
@@ -110,62 +158,64 @@ function setLoading(intentId, isLoading, card, btn, sources) {
   }
 }
 
-// ── render results ────────────────────────────────────────────
+// ── render results ───────────────────────────────────────────────────────────
 function renderResults(data, clientLatencyMs) {
-  const section = document.getElementById('results-section');
-  const block   = document.getElementById('result-block');
-  const latBadge = document.getElementById('latency-badge');
-  const failBadge = document.getElementById('failure-badge');
-  const srcBadge  = document.getElementById('source-badge');
+  const section    = document.getElementById('results-section');
+  const block      = document.getElementById('result-block');
+  const rawBlock   = document.getElementById('raw-block');
+  const latBadge   = document.getElementById('latency-badge');
+  const failBadge  = document.getElementById('failure-badge');
+  const srcBadge   = document.getElementById('source-badge');
 
-  // latency badge — prefer server-reported, show client as fallback
   const latMs = data.total_latency_ms ?? clientLatencyMs;
   latBadge.textContent = `${latMs}ms`;
+  latBadge.style.color = '';
 
-  // partial failure badge
   if (data.partial_failure) {
-    failBadge.textContent  = '⚠ partial failure';
-    failBadge.className    = 'meta-badge failure-badge-warn';
-    failBadge.hidden       = false;
+    failBadge.textContent = '⚠ partial failure';
+    failBadge.className   = 'meta-badge failure-badge-warn';
+    failBadge.hidden      = false;
   } else {
-    failBadge.textContent  = '✓ all sources ok';
-    failBadge.className    = 'meta-badge failure-badge-ok';
-    failBadge.hidden       = false;
+    failBadge.textContent = '✓ all sources ok';
+    failBadge.className   = 'meta-badge failure-badge-ok';
+    failBadge.hidden      = false;
   }
 
-  // source count badge
-  const resultCount = data.results?.length ?? 0;
-  srcBadge.textContent = `${resultCount} source${resultCount !== 1 ? 's' : ''}`;
+  const resultCount    = data.results?.length ?? 0;
+  srcBadge.textContent = `${resultCount} result${resultCount !== 1 ? 's' : ''}`;
+  srcBadge.hidden      = false;
 
-  // syntax-highlighted JSON
+  // Highlighted view
   block.innerHTML = highlightJSON(JSON.stringify(data, null, 2));
+  block.hidden    = false;
+  rawBlock.hidden = true;
 
-  // reveal with animation (re-trigger by toggling hidden)
   section.hidden = true;
   requestAnimationFrame(() => { section.hidden = false; });
 }
 
 function renderError(message) {
-  const section = document.getElementById('results-section');
-  const block   = document.getElementById('result-block');
+  const section   = document.getElementById('results-section');
+  const block     = document.getElementById('result-block');
+  const rawBlock  = document.getElementById('raw-block');
   const latBadge  = document.getElementById('latency-badge');
   const failBadge = document.getElementById('failure-badge');
   const srcBadge  = document.getElementById('source-badge');
 
-  latBadge.textContent   = 'error';
-  latBadge.style.color   = 'var(--error)';
-  failBadge.hidden       = true;
-  srcBadge.hidden        = true;
+  latBadge.textContent = 'error';
+  latBadge.style.color = 'var(--error, #f87171)';
+  failBadge.hidden     = true;
+  srcBadge.hidden      = true;
 
-  block.innerHTML = `<span style="color:var(--error)">✕ ${escapeHTML(message)}</span>`;
+  block.innerHTML = `<span style="color:var(--error,#f87171)">✕ ${escapeHTML(message)}</span>`;
+  block.hidden    = false;
+  rawBlock.hidden = true;
 
   section.hidden = true;
   requestAnimationFrame(() => { section.hidden = false; });
 }
 
-// ── JSON syntax highlighter ───────────────────────────────────
-// A minimal but complete tokenizer — no regex over the whole string,
-// walks character by character to correctly handle strings containing : or digits.
+// ── JSON syntax highlighter ──────────────────────────────────────────────────
 function highlightJSON(json) {
   let out = '';
   let i   = 0;
@@ -173,14 +223,12 @@ function highlightJSON(json) {
   while (i < json.length) {
     const ch = json[i];
 
-    // whitespace
     if (ch === ' ' || ch === '\n' || ch === '\r' || ch === '\t') {
-      out += ch === '\n' ? '\n' : ch === '\t' ? '\t' : ' ';
+      out += ch;
       i++;
       continue;
     }
 
-    // structural
     if ('{}[]'.includes(ch)) {
       out += `<span class="json-brace">${escapeHTML(ch)}</span>`;
       i++;
@@ -193,7 +241,6 @@ function highlightJSON(json) {
       continue;
     }
 
-    // string — walk until unescaped closing quote
     if (ch === '"') {
       let str = '"';
       i++;
@@ -204,40 +251,24 @@ function highlightJSON(json) {
         if (c === '"')  { i++; break; }
         i++;
       }
-      // decide if key or value: look ahead past whitespace for ':'
       let j = i;
       while (j < json.length && (json[j] === ' ' || json[j] === '\n')) j++;
       const isKey = json[j] === ':';
-      const cls   = isKey ? 'json-key' : 'json-str';
-      out += `<span class="${cls}">${escapeHTML(str)}</span>`;
+      out += `<span class="${isKey ? 'json-key' : 'json-str'}">${escapeHTML(str)}</span>`;
       continue;
     }
 
-    // number
     if (ch === '-' || (ch >= '0' && ch <= '9')) {
       let num = '';
-      while (i < json.length && '0123456789.-+eE'.includes(json[i])) {
-        num += json[i++];
-      }
+      while (i < json.length && '0123456789.-+eE'.includes(json[i])) num += json[i++];
       out += `<span class="json-num">${escapeHTML(num)}</span>`;
       continue;
     }
 
-    // true / false / null
-    if (json.startsWith('true', i)) {
-      out += `<span class="json-bool">true</span>`;
-      i += 4; continue;
-    }
-    if (json.startsWith('false', i)) {
-      out += `<span class="json-bool">false</span>`;
-      i += 5; continue;
-    }
-    if (json.startsWith('null', i)) {
-      out += `<span class="json-null">null</span>`;
-      i += 4; continue;
-    }
+    if (json.startsWith('true',  i)) { out += `<span class="json-bool">true</span>`;  i += 4; continue; }
+    if (json.startsWith('false', i)) { out += `<span class="json-bool">false</span>`; i += 5; continue; }
+    if (json.startsWith('null',  i)) { out += `<span class="json-null">null</span>`;  i += 4; continue; }
 
-    // fallback
     out += escapeHTML(ch);
     i++;
   }
@@ -245,47 +276,33 @@ function highlightJSON(json) {
   return out;
 }
 
-// ── log strip ─────────────────────────────────────────────────
+// ── log strip ────────────────────────────────────────────────────────────────
 function appendLog({ intentId, sources, latencyMs, partial, error }) {
-  const now  = new Date();
-  const time = now.toTimeString().slice(0, 8);
-
-  let entry;
-  if (error) {
-    entry = { time, intentId, sources, latencyMs, error };
-  } else {
-    entry = { time, intentId, sources, latencyMs, partial, error: null };
-  }
-
-  logs.unshift(entry);           // newest first
+  const time = new Date().toTimeString().slice(0, 8);
+  logs.unshift({ time, intentId, sources, latencyMs, partial, error: error ?? null });
   if (logs.length > MAX_LOG_ENTRIES) logs.pop();
-
   renderLogs();
 }
 
 function renderLogs() {
   const strip = document.getElementById('log-strip');
-
-  if (logs.length === 0) {
+  if (!logs.length) {
     strip.innerHTML = '<div class="log-empty">no activity yet — run an intent to begin</div>';
     return;
   }
-
-  strip.innerHTML = logs.map(entry => {
-    const timeSpan   = `<span class="log-time">[${entry.time}]</span>`;
-    const intentSpan = `<span class="log-intent">${entry.intentId}</span>`;
+  strip.innerHTML = logs.map(e => {
+    const timeSpan   = `<span class="log-time">[${e.time}]</span>`;
+    const intentSpan = `<span class="log-intent">${e.intentId}</span>`;
     const arrow      = `<span class="log-arrow"> → </span>`;
-
-    if (entry.error) {
-      return `<div class="log-entry">${timeSpan} ${intentSpan}${arrow}<span class="log-err">✕ ${escapeHTML(entry.error)}</span></div>`;
+    if (e.error) {
+      return `<div class="log-entry">${timeSpan} ${intentSpan}${arrow}<span class="log-err">✕ ${escapeHTML(e.error)}</span></div>`;
     }
-
-    const detail = `${entry.sources} source${entry.sources !== 1 ? 's' : ''} → ${entry.latencyMs}ms${entry.partial ? ' ⚠ partial' : ''}`;
+    const detail = `${e.sources} result${e.sources !== 1 ? 's' : ''} · ${e.latencyMs}ms${e.partial ? ' ⚠ partial' : ''}`;
     return `<div class="log-entry">${timeSpan} ${intentSpan}${arrow}<span class="log-detail">${detail}</span></div>`;
   }).join('');
 }
 
-// ── utils ─────────────────────────────────────────────────────
+// ── utils ─────────────────────────────────────────────────────────────────────
 function escapeHTML(str) {
   return String(str)
     .replace(/&/g, '&amp;')

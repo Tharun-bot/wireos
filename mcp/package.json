@@ -1,17 +1,23 @@
 {
   "name": "wireos-mcp",
   "version": "0.1.0",
-  "description": "MCP wrapper for WireOS personal data federation",
-  "type": "module",
-  "main": "index.js",
+  "description": "MCP server exposing WireOS personal data federation as a Claude Desktop tool",
+  "type": "commonjs",
+  "main": "dist/index.js",
   "scripts": {
-    "start": "node index.js",
-    "build": "tsc"
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc && node dist/index.js"
   },
-  "keywords": ["mcp", "wireos", "ai-agents"],
-  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
   "devDependencies": {
     "typescript": "^5.4.0",
     "@types/node": "^20.0.0"
-  }
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "MIT"
 }

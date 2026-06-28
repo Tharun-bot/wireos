@@ -1,22 +1,27 @@
 version: "3.9"
 
+networks:
+  wireos-net:
+    driver: bridge
+
 services:
   backend:
     build:
       context: ./backend
-      dockerfile: Dockerfile
+    env_file: .env
     ports:
-      - "8080:8080"
-    env_file:
-      - .env
+      - "8081:8081"
     restart: unless-stopped
+    networks:
+      - wireos-net
 
   frontend:
-    image: nginx:alpine
+    build:
+      context: ./frontend
     ports:
       - "3000:80"
-    volumes:
-      - ./frontend:/usr/share/nginx/html:ro
     depends_on:
       - backend
     restart: unless-stopped
+    networks:
+      - wireos-net
