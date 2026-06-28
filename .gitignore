@@ -1,0 +1,21 @@
+# Go
+backend/wireos
+backend/*.exe
+*.test
+*.out
+
+# Node
+mcp/node_modules/
+mcp/dist/
+
+# Env
+.env
+*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

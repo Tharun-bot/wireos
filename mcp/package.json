@@ -1,0 +1,17 @@
+{
+  "name": "wireos-mcp",
+  "version": "0.1.0",
+  "description": "MCP wrapper for WireOS personal data federation",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "build": "tsc"
+  },
+  "keywords": ["mcp", "wireos", "ai-agents"],
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0"
+  }
+}
