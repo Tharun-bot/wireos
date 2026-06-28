@@ -1,0 +1,96 @@
+# WireOS Intent Routing Table
+# Each intent maps a user-facing query type to one or more Wire actions.
+# output_type must be one of: transaction, activity, contact, generic
+# params_template values: static value OR "{user_input}" for runtime substitution
+# WIRE_ACTION_TBD = placeholder where exact Wire catalog slug is unconfirmed
+
+intents:
+  - id: recent_purchases
+    label: "Recent Purchases"
+    description: "What did I buy recently and how much did I spend?"
+    actions:
+      - action_id: amazon.order_history
+        site: amazon
+        params_template:
+          days: 30
+          limit: 50
+        identity_required: true
+        output_type: transaction
+
+  - id: professional_activity
+    label: "Professional Activity"
+    description: "What have I been doing professionally this week?"
+    actions:
+      - action_id: linkedin.activity_feed   # confirmed in Wire catalog as of May 2025
+        site: linkedin
+        params_template:
+          days: 7
+        identity_required: true
+        output_type: activity
+      - action_id: linkedin.profile_summary  # WIRE_ACTION_TBD — use if activity_feed unavailable
+        site: linkedin
+        params_template: {}
+        identity_required: true
+        output_type: generic
+
+  - id: github_activity
+    label: "GitHub Activity"
+    description: "Show my recent commits, PRs, and code reviews."
+    actions:
+      - action_id: github.user_activity     # WIRE_ACTION_TBD — may be github.commits or github.events
+        site: github
+        params_template:
+          username: "{user_input}"
+          days: 7
+        identity_required: false            # public activity; identity boosts rate limits
+        output_type: activity
+      - action_id: github.pull_requests     # WIRE_ACTION_TBD
+        site: github
+        params_template:
+          username: "{user_input}"
+          state: open
+        identity_required: false
+        output_type: activity
+
+  - id: portfolio_snapshot
+    label: "Portfolio Snapshot"
+    description: "What is my current investment portfolio and net worth estimate?"
+    actions:
+      - action_id: robinhood.portfolio_summary  # WIRE_ACTION_TBD — Wire catalog lists robinhood but action slug unconfirmed
+        site: robinhood
+        params_template: {}
+        identity_required: true
+        output_type: generic
+      - action_id: robinhood.positions          # WIRE_ACTION_TBD — fallback to positions list
+        site: robinhood
+        params_template: {}
+        identity_required: true
+        output_type: transaction
+
+  - id: job_applications
+    label: "Job Applications"
+    description: "What jobs have I applied to and what is their status?"
+    actions:
+      - action_id: linkedin.job_applications    # WIRE_ACTION_TBD — LinkedIn exposes this in their API; Wire may wrap it
+        site: linkedin
+        params_template:
+          limit: 25
+        identity_required: true
+        output_type: activity
+      - action_id: linkedin.saved_jobs          # WIRE_ACTION_TBD — fallback
+        site: linkedin
+        params_template: {}
+        identity_required: true
+        output_type: generic
+
+  - id: web_research
+    label: "Web Research"
+    description: "Search the web for current information on a topic."
+    actions:
+      - action_id: anakin.agentic_search        # Anakin's own search product, not a scraped site
+        site: anakin
+        params_template:
+          query: "{user_input}"
+          depth: standard
+        identity_required: false
+        output_type: generic
